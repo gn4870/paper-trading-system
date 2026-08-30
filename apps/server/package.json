@@ -1,0 +1,30 @@
+{
+  "name": "@paper/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "prebuild": "npm run build -w @paper/shared",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --import \"data:text/javascript,process.env.NODE_ENV='production'\" dist/server.js",
+    "pretypecheck": "npm run build -w @paper/shared",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/cookie": "^0.6.0",
+    "@types/express": "^5.0.6",
+    "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.1",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.12"
+  },
+  "dependencies": {
+    "@paper/shared": "^0.0.0",
+    "cookie": "^2.0.1",
+    "express": "^5.2.1",
+    "ws": "^8.21.3",
+    "zod": "^4.5.2"
+  }
+}

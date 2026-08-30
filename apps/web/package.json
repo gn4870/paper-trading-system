@@ -1,0 +1,26 @@
+{
+  "name": "@paper/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "build:e2e": "vue-tsc -b && vite build --mode e2e",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.5.0",
+    "jsdom": "^29.1.1",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  },
+  "dependencies": {
+    "@paper/shared": "^0.0.0",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.0"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "paper-trading-sdd",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:*\"",
+    "dev:web": "npm run dev -w @paper/web",
+    "dev:server": "npm run dev -w @paper/server",
+    "build": "npm run build -w @paper/shared && npm run build -w @paper/web && npm run build -w @paper/server",
+    "build:e2e": "npm run build -w @paper/shared && npm run build:e2e -w @paper/web && npm run build -w @paper/server",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "pretest": "npm run build -w @paper/shared",
+    "test": "vitest run",
+    "test:e2e": "npm run build:e2e && playwright test",
+    "start": "npm run start -w @paper/server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  }
+}
