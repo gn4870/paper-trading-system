@@ -1,3 +1,9 @@
+/**
+ * 系统流动性服务。
+ *
+ * 两个内部系统账户围绕参考价各挂三档买卖单，让单用户演示也能成交。系统单
+ * 仍复用普通下单、撮合和结算路径，不享有特殊价格或时间优先权。
+ */
 import {
   placeOrderSchema,
   type PlaceOrderRequest,
@@ -109,6 +115,8 @@ export class LiquidityService {
       throw new Error("System liquidity accounts are not initialized");
     }
 
+    // 先生成并校验完整计划，确认系统总资产足够后，才撤销上一周期的系统单。
+    // 真实用户订单不在撤销范围内，会继续保留原 sequence 和时间优先级。
     const plan = this.buildRefreshPlan();
     this.assertRefreshAssets(plan);
     const activeSystemOrders = this.orders.listSystemOrders();
@@ -132,6 +140,7 @@ export class LiquidityService {
           1,
           Math.round(quote.lastPriceMinor * (1 - level.distance))
         );
+        // 四舍五入可能让 bid/ask 相等，因此至少强制保留一个最小货币单位价差。
         const ask = Math.max(
           bid + 1,
           Math.round(quote.lastPriceMinor * (1 + level.distance))

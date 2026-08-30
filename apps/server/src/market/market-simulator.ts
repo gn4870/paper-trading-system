@@ -1,3 +1,9 @@
+/**
+ * 三支股票的参考行情模拟器。
+ *
+ * 参考价每秒随机波动 -0.5%～+0.5%，与订单簿真实成交价是两个不同概念；
+ * 订单簿的最佳买卖价会在流动性刷新后再写回行情快照。
+ */
 import { SYMBOLS, type StockQuote, type SymbolCode } from "@paper/shared";
 
 import {
@@ -52,6 +58,8 @@ export class MarketSimulator {
   }
 
   advanceAll(): void {
+    // 先在局部数组中计算完三支股票，再一次性写回 Map。任意一支计算失败时，
+    // 不会出现只有部分股票进入新周期的状态。
     const nextQuotes = SYMBOLS.map((symbol) => {
       const previous = this.requireQuote(symbol);
       const randomValue = this.random.next();
@@ -72,6 +80,7 @@ export class MarketSimulator {
       if (!Number.isFinite(changePercent)) {
         throw new RangeError("Market change must be finite");
       }
+      // 一秒一个点，只保留最近 60 个点供前端迷你走势图使用。
       const history = [
         ...previous.history,
         { priceMinor: nextPriceMinor, at: this.clock.now() }
@@ -90,6 +99,7 @@ export class MarketSimulator {
   }
 
   setBestPrices(): void {
+    // 最新参考价来自随机行情，best bid/ask 则来自真实订单簿顶部。
     for (const symbol of SYMBOLS) {
       const quote = this.requireQuote(symbol);
       const top = this.state.books.get(symbol)?.topOfBook();

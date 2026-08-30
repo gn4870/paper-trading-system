@@ -1,3 +1,9 @@
+/**
+ * 生产进程入口。
+ *
+ * 解析端口、启动 Runtime，并将 SIGINT/SIGTERM 合并为一次幂等关闭；真正的业务
+ * 组装在 runtime.ts 中，使进程入口保持薄层，便于隔离信号和退出码行为。
+ */
 import { pathToFileURL } from "node:url";
 
 import { createRuntime, type Runtime } from "./runtime.js";

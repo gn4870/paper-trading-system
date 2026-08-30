@@ -1,3 +1,9 @@
+/**
+ * 一秒行情周期的生命周期控制器。
+ *
+ * 顺序不能随意调整：先推进参考价，再围绕新价格刷新系统盘口，然后读取新的
+ * 最佳买卖价并发布最终行情。start/stop 保证同一实例最多持有一个定时器。
+ */
 import { LiquidityService } from "../liquidity/liquidity-service.js";
 import { MarketSimulator } from "./market-simulator.js";
 
@@ -44,6 +50,7 @@ export class MarketCycle {
         try {
           this.tick();
         } catch (error) {
+          // 单次行情失败只记录错误，不能让周期定时器永久停止。
           this.onTickError(error);
         }
       }, 1_000)

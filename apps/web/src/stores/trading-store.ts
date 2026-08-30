@@ -1,3 +1,9 @@
+/**
+ * 前端交易数据的权威副本。
+ *
+ * REST bootstrap 负责完整替换，WebSocket 业务事件负责按 ID 增量 upsert。这里
+ * 不做下单的乐观余额变化，资金、持仓和成交始终以服务端推送为准。
+ */
 import {
   SYMBOLS,
   type AccountSnapshot,
@@ -49,6 +55,7 @@ export const createTradingStoreHarness = (): TradingStore => {
     stateVersion: 0,
     appliedEventIds: [],
     replaceSnapshot: (snapshot) => {
+      // 重连时必须完整替换而不是 merge；本地可能含有断线前已经失效的旧状态。
       quotesBySymbol.clear();
       ordersById.clear();
       tradesById.clear();
@@ -71,6 +78,7 @@ export const createTradingStoreHarness = (): TradingStore => {
       state.appliedEventIds = [];
     },
     applyEvent: (serverEvent) => {
+      // 版本不比快照新，或 eventId 已处理过，都可以安全忽略。
       if (
         serverEvent.type === "connection.ready" ||
         serverEvent.type === "heartbeat"
@@ -114,6 +122,7 @@ export const createTradingStoreHarness = (): TradingStore => {
         }
       }
 
+      // 全局版本不要求连续：跳过的版本可能属于其他用户的私有事件。
       state.stateVersion = serverEvent.stateVersion;
       appliedEventIdSet.add(serverEvent.eventId);
       state.appliedEventIds.push(serverEvent.eventId);

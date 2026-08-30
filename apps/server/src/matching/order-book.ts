@@ -1,3 +1,9 @@
+/**
+ * 单支股票的纯内存限价订单簿。
+ *
+ * 买盘按价格从高到低、卖盘按价格从低到高；同价时 sequence 小的先成交。
+ * 本模块只计算成交和订单剩余量，不直接修改账户，也不发布网络事件。
+ */
 import type { Order, OrderSide, SymbolCode } from "@paper/shared";
 
 import { DomainError } from "../infrastructure/domain-error.js";
@@ -75,6 +81,7 @@ export class OrderBook {
     const fills: Fill[] = [];
     let selfTradePrevented = false;
 
+    // 新订单可能连续吃掉多个对手订单，所以一直撮合到数量归零或价格不再交叉。
     while (incoming.remainingQuantity > 0) {
       const resting = this.bestOppositeOrder(incoming.side);
       if (resting === undefined || !this.crosses(incoming, resting)) {
@@ -85,6 +92,8 @@ export class OrderBook {
         resting.userId === incoming.userId &&
         !this.isSystemUser(incoming.userId)
       ) {
+        // 不跳过自己的最优挂单，否则会绕过价格/时间优先。当前策略是取消新单
+        // 的剩余部分；系统流动性账户不受此限制。
         incoming.status = "CANCELED";
         selfTradePrevented = true;
         break;
@@ -175,6 +184,7 @@ export class OrderBook {
     return {
       buyOrder: cloneOrder(buyOrder),
       sellOrder: cloneOrder(sellOrder),
+      // 成交价取先进入订单簿的 maker（resting order）价格。
       executionPriceMinor: resting.limitPriceMinor,
       quantity
     };

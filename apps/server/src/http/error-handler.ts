@@ -1,3 +1,9 @@
+/**
+ * HTTP 错误边界。
+ *
+ * 已知校验/业务错误转换为稳定的中文 API 错误；未知异常只在服务端按 requestId
+ * 记录，响应不泄漏堆栈、路径或内部实现细节。
+ */
 import type { ApiErrorResponse } from "@paper/shared";
 import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";

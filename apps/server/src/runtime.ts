@@ -1,3 +1,9 @@
+/**
+ * 服务端组合根（composition root）与生命周期管理器。
+ *
+ * 所有内存状态和领域服务都在这里创建并连接；start 负责初始化行情、流动性、
+ * WebSocket 和定时器，stop 则尽力释放所有资源并聚合清理错误。
+ */
 import { createServer, type Server } from "node:http";
 import { type AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -94,6 +100,7 @@ const seedHash = (seed: string): number => {
 };
 
 const testRuntimeDefaults = (): TestRuntimeDefaults | undefined => {
+  // 确定性 ID、时钟和随机数只在显式 test 模式启用，绝不影响生产运行。
   const seed = process.env.PAPER_TEST_SEED;
   if (process.env.NODE_ENV !== "test" || seed === undefined) return undefined;
   if (seed.length === 0) throw new Error("PAPER_TEST_SEED must not be empty");
@@ -172,6 +179,7 @@ export const createRuntime = (options: RuntimeOptions = {}): Runtime => {
       : undefined;
   let status: "new" | "starting" | "started" | "stopping" | "stopped" = "new";
 
+  // 以下顺序体现依赖方向：基础状态 → 领域服务 → HTTP/WS 适配器。
   const state = new MemoryState();
   const ledger = new AccountLedger(state);
   const journal = new EventJournal(clock, ids);
@@ -238,6 +246,7 @@ export const createRuntime = (options: RuntimeOptions = {}): Runtime => {
   const startOnce = async (port: number): Promise<number> => {
     status = "starting";
     try {
+      // 首次监听前先完成一个完整 tick，保证页面一打开就有行情和可成交盘口。
       market.initialize();
       liquidity.initializeAccounts();
       marketCycle.tick();
@@ -267,6 +276,7 @@ export const createRuntime = (options: RuntimeOptions = {}): Runtime => {
     if (status === "started" && boundPort !== undefined) {
       return Promise.resolve(boundPort);
     }
+    // 并发 start 调用共享同一个 Promise，避免重复创建监听器或定时器。
     if (startPromise !== undefined) return startPromise;
     if (status !== "new") {
       return Promise.reject(new Error("Runtime cannot be started"));
@@ -284,6 +294,7 @@ export const createRuntime = (options: RuntimeOptions = {}): Runtime => {
   };
 
   const stop = (): Promise<void> => {
+    // stop 同样幂等；即使在启动过程中收到退出信号，也会等待并完整清理。
     if (stopPromise !== undefined) return stopPromise;
     stopRequested = true;
     stopPromise = (async () => {

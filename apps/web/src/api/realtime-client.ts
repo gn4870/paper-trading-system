@@ -1,3 +1,9 @@
+/**
+ * WebSocket 传输客户端。
+ *
+ * 本类只处理连接、消息协议校验、存活检测和指数退避，不直接修改交易状态。
+ * “快照 + 增量”的业务恢复由 realtime-store 负责，从而分离传输与状态归并。
+ */
 import { SYMBOLS, type ServerEvent } from "@paper/shared";
 
 export interface RealtimeSocket {
@@ -188,6 +194,8 @@ const knownEventTypes = new Set([
 ]);
 
 const parseServerEvent = (raw: unknown): ParseResult => {
+  // WebSocket 数据来自网络，不能仅靠 TypeScript 类型断言；已知事件必须逐字段
+  // 验证，未知的未来事件则忽略，以保留协议向前兼容空间。
   if (typeof raw !== "string") return { kind: "unknown" };
   let value: unknown;
   try {
@@ -234,6 +242,7 @@ export class RealtimeClient {
   private retryTimer: unknown | undefined;
   private livenessTimer: unknown | undefined;
   private retryAttempt = 0;
+  // 每次换 socket 都推进 generation，旧连接迟到的回调不会污染当前连接。
   private generation = 0;
   private active = false;
 
@@ -274,6 +283,7 @@ export class RealtimeClient {
     if (!this.active) return;
     if (this.retryTimer !== undefined) return;
     const socket = this.socket;
+    // 同步层发现冲突时主动关闭当前连接，统一进入正常的退避重连流程。
     if (socket !== undefined && socket.readyState < WebSocket.CLOSING) {
       socket.close(CLIENT_RETRY_CLOSE_CODE, "resynchronization failed");
       return;
@@ -282,6 +292,7 @@ export class RealtimeClient {
   }
 
   markSynchronized(): void {
+    // 仅“连接成功”还不够；直到 bootstrap 与缓冲事件归并完成才重置退避次数。
     this.retryAttempt = 0;
   }
 
@@ -340,6 +351,7 @@ export class RealtimeClient {
 
   private scheduleRetry(event: CloseEvent | null): void {
     if (!this.active || this.retryTimer !== undefined) return;
+    // 500ms 起步、指数增长、10s 封顶，并加入抖动避免大量客户端同时重连。
     const exponent = Math.min(this.retryAttempt, 30);
     const baseDelay = Math.min(
       MAX_RETRY_DELAY_MS,
@@ -366,6 +378,8 @@ export class RealtimeClient {
   }
 
   private armLivenessTimer(socket: RealtimeSocket, generation: number): void {
+    // 浏览器拿不到原生 ping/pong 控制帧，因此以任意合法服务端消息（包含应用层
+    // heartbeat）刷新存活计时器。
     this.clearLivenessTimer();
     this.livenessTimer = this.timer.setTimeout(() => {
       this.livenessTimer = undefined;
@@ -392,6 +406,7 @@ export class RealtimeClient {
     ) {
       return;
     }
+    // 先让旧 socket 失效，再安排独立重试；即使 close 抛错也不会卡住恢复。
     this.generation += 1;
     this.socket = undefined;
     this.clearLivenessTimer();

@@ -1,4 +1,10 @@
 <script setup lang="ts">
+/**
+ * 限价委托输入组件。
+ *
+ * 负责把用户输入精确转换为“分”和整数数量，并为一次下单意图维护稳定的
+ * clientOrderId。网络结果不确定时保留 ID 重试，明确 4xx 或成功后才生成新 ID。
+ */
 import type { OrderSide, PlaceOrderRequest, SymbolCode } from "@paper/shared";
 import { computed, ref, watch } from "vue";
 
@@ -22,6 +28,7 @@ const successMessage = ref("");
 const retainedIntent = ref<{ key: string; clientOrderId: string } | null>(null);
 
 const parsePriceMinor = (input: string): number | null => {
+  // 直接按十进制字符串拆分并用 BigInt 计算，避免 Number(price) * 100 的浮点误差。
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(input)) return null;
   const [major = "0", cents = ""] = input.split(".");
   const minor = BigInt(major) * 100n + BigInt(cents.padEnd(2, "0"));
@@ -64,6 +71,7 @@ const intentKey = (
 const clientOrderIdFor = (key: string): string => {
   if (retainedIntent.value?.key === key)
     return retainedIntent.value.clientOrderId;
+  // 股票、方向、价格或数量变化代表新的下单意图，应使用新的幂等 ID。
   const clientOrderId = globalThis.crypto.randomUUID();
   retainedIntent.value = { key, clientOrderId };
   return clientOrderId;
@@ -102,6 +110,8 @@ const submit = async (side: OrderSide): Promise<void> => {
     if (retainedIntent.value?.key === key) retainedIntent.value = null;
     successMessage.value = "委托已受理，等待实时数据确认。";
   } catch (error: unknown) {
+    // 4xx 表示服务端明确拒绝，本次 ID 可以丢弃；网络错误/5xx 的结果可能未知，
+    // 必须保留同一 ID 供用户安全重试。
     if (resultIsDefiniteRejection(error) && retainedIntent.value?.key === key) {
       retainedIntent.value = null;
     }

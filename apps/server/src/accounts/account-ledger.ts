@@ -1,3 +1,9 @@
+/**
+ * 账户账本：系统中唯一允许修改资金和持仓的模块。
+ *
+ * 买单冻结“限价 × 数量”，卖单冻结委托数量；成交、撤单和自成交防护都只能
+ * 通过账本释放或结算资产。所有写操作结束时都会再次检查非负安全整数不变量。
+ */
 import type { AccountSnapshot, OrderSide, SymbolCode } from "@paper/shared";
 
 import { DomainError } from "../infrastructure/domain-error.js";
@@ -14,6 +20,8 @@ const cloneAccount = (account: AccountSnapshot): AccountSnapshot => ({
   }
 });
 
+// 以 MemoryState 为作用域私有保存账户，使测试/运行时实例相互隔离，同时不向
+// MemoryState 使用者暴露任意写余额的能力。
 const accountStores = new WeakMap<MemoryState, Map<string, AccountSnapshot>>();
 
 const accountStoreFor = (state: MemoryState): Map<string, AccountSnapshot> => {
@@ -113,6 +121,7 @@ export class AccountLedger {
     this.assertReservationInput(input);
     const account = this.requireAccount(input.userId);
 
+    // 预冻结让多张并发挂单也无法重复使用同一笔资金或同一份持仓。
     if (input.side === "BUY") {
       const amount = this.buyReservationAmount(input);
       if (account.cashAvailableMinor < amount) {
@@ -170,6 +179,7 @@ export class AccountLedger {
       input.executionPriceMinor,
       input.quantity
     );
+    // 买方按自己的限价预冻结；若实际按更优的挂单价成交，价差立即退回可用资金。
     const refund = reservedCash - executionCash;
 
     if (buyer.cashFrozenMinor < reservedCash) {
@@ -190,6 +200,8 @@ export class AccountLedger {
   }
 
   transact<T>(operation: () => T): T {
+    // 内存版“事务”：命令失败时恢复所有账户快照。它只覆盖账户，订单等状态由
+    // OrderService 的命令快照配合回滚。
     const store = accountStoreFor(this.state);
     const before = new Map(
       [...store].map(([userId, account]) => [userId, cloneAccount(account)])

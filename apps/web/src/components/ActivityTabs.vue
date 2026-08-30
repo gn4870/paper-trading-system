@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * 委托、持仓和成交三个活动面板的协调组件。
+ * 撤单成功后仍保持按钮锁定，直到服务端 order.updated 确认订单已不再活跃，
+ * 防止网络响应与实时状态到达顺序不同造成重复撤单。
+ */
 import type { AccountSnapshot, Order, Trade } from "@paper/shared";
 import { ref, watch } from "vue";
 

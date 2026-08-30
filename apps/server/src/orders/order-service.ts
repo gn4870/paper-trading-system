@@ -1,3 +1,10 @@
+/**
+ * 订单应用服务：协调一次下单/撤单涉及的全部领域模块。
+ *
+ * 典型链路是：幂等检查 → 资产冻结 → 撮合 → 结算 → 保存订单/成交 → 发布事件。
+ * OrderBook 只决定“怎么成交”，AccountLedger 只负责“资产怎么变化”，本服务
+ * 负责让两者作为一个命令提交或一起回滚。
+ */
 import {
   SYMBOLS,
   type Order,
@@ -61,6 +68,8 @@ export class OrderService {
 
   place(userId: string, request: PlaceOrderRequest): PlaceOrderResult {
     const idempotencyKey = `${userId}:${request.clientOrderId}`;
+    // HTTP 响应可能丢失：同一用户用同一 clientOrderId 重试时，回放第一次结果，
+    // 而不是创建第二张订单。
     const existingRecord = this.state.idempotency.get(idempotencyKey);
     if (existingRecord !== undefined) {
       const existing = this.requireOrder(existingRecord.orderId);
@@ -97,6 +106,7 @@ export class OrderService {
       };
       this.state.orders.set(order.id, clone(order));
 
+      // 从已提交订单重建临时订单簿；撮合失败时不会污染原来的已提交订单簿。
       const book = this.buildBook(request.symbol, order.id);
       const matched = book.submit(order);
       const trades = this.settleFills(matched, now);
@@ -120,6 +130,7 @@ export class OrderService {
         orderId: order.id,
         trades: clone(trades)
       });
+      // 事件最后发布，确保客户端永远只看见已经提交成功的业务状态。
       this.journal.publish(this.placeEventDrafts(matched, trades));
 
       return {
@@ -222,6 +233,7 @@ export class OrderService {
 
   private settleFills(matched: SubmitResult, executedAt: string): Trade[] {
     const trades: Trade[] = [];
+    // 一张主动单可能产生多笔成交，每笔分别结算并获得独立的成交序号。
     for (const fill of matched.fills) {
       this.ledger.settle({
         buyerId: fill.buyOrder.userId,
@@ -295,6 +307,7 @@ export class OrderService {
         payload: this.ledger.snapshot(userId)
       });
     }
+    // 成交属于买卖双方的私有数据；双方是同一账户时只发布一次。
     for (const trade of trades) {
       drafts.push({
         type: "trade.created",
@@ -345,6 +358,7 @@ export class OrderService {
   }
 
   private runCommand<T>(operation: () => T): T {
+    // 账本负责回滚账户，本层负责回滚订单、成交、幂等记录、订单簿和序号。
     const before = this.snapshotCommandState();
     return this.ledger.transact(() => {
       try {

@@ -1,3 +1,9 @@
+/**
+ * WebSocket 与交易状态之间的同步协调层。
+ *
+ * 连接打开后先缓冲增量，同时请求 bootstrap 快照；快照落地后再按版本应用比
+ * 快照更新的缓冲事件。这样不会丢失“WebSocket 建连与快照返回之间”的变化。
+ */
 import type {
   BootstrapResponse,
   BusinessServerEvent,
@@ -94,6 +100,7 @@ export const createRealtimeStoreHarness = (
 ): RealtimeStore => {
   let active = false;
   let synchronizing = false;
+  // generation 让旧连接发起、但晚到的 bootstrap 响应自动失效。
   let synchronizationGeneration = 0;
   let bufferedEvents: BusinessServerEvent[] = [];
   let bufferedById = new Map<string, BusinessServerEvent>();
@@ -170,6 +177,7 @@ export const createRealtimeStoreHarness = (
   };
 
   const stopUnauthorized = (error: unknown): void => {
+    // 会话拒绝是终止性错误：停止重试，并通知认证层跳回登录页。
     if (!active) return;
     active = false;
     clearSynchronization();
@@ -211,6 +219,8 @@ export const createRealtimeStoreHarness = (
       const snapshot = await options.bootstrapClient.bootstrap();
       if (!active || generation !== synchronizationGeneration || !synchronizing)
         return;
+      // connection.ready 记录建连时服务端版本；若快照反而更旧，说明无法建立
+      // 可信基线，宁可重新同步也不拼接可能缺失的状态。
       if (
         bufferConflict ||
         (readyVersion !== undefined && snapshot.stateVersion < readyVersion)
@@ -224,6 +234,7 @@ export const createRealtimeStoreHarness = (
           left.stateVersion - right.stateVersion ||
           left.eventId.localeCompare(right.eventId)
       );
+      // 快照先成为基线，只回放快照版本之后发生的增量。
       options.trading.replaceSnapshot(snapshot);
       for (const event of orderedEvents) {
         if (event.stateVersion > snapshot.stateVersion)
@@ -267,6 +278,7 @@ export const createRealtimeStoreHarness = (
   };
 
   const bufferEvent = (event: BusinessServerEvent): void => {
+    // 同 ID 不同版本，或同版本不同 ID，意味着协议/数据不一致，不能静默覆盖。
     const sameId = bufferedById.get(event.eventId);
     if (sameId !== undefined) {
       if (
@@ -305,6 +317,7 @@ export const createRealtimeStoreHarness = (
       return;
     }
     if (state.connectionStatus !== "live") return;
+    // 同版本但出现未处理过的新 ID 是冲突；正常重复投递应拥有相同 eventId。
     if (event.stateVersion === options.trading.stateVersion) {
       if (!options.trading.appliedEventIds.includes(event.eventId))
         requestRetry();

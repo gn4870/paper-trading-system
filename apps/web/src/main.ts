@@ -1,3 +1,4 @@
+/** 浏览器入口：依次安装 Pinia、路由并挂载根组件。业务组合从 TradeView 开始。 */
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 

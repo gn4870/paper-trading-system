@@ -1,4 +1,10 @@
 <script setup lang="ts">
+/**
+ * 交易终端页面的组合层。
+ *
+ * 页面负责连接组件、Pinia 和 API，不在这里实现撮合或复制状态归并逻辑。
+ * 下单/撤单只发送 REST 命令，账户与列表等待 WebSocket 权威事件更新。
+ */
 import type { PlaceOrderRequest, SymbolCode } from "@paper/shared";
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { useRouter } from "vue-router";
@@ -50,7 +56,9 @@ watchEffect(
 
 const handleUnauthorized = (): void => {
   if (!mounted) return;
+  // REST 401 或 WebSocket 1008 都收敛到同一退出路径。
   auth.invalidate();
+  // 先停止实时连接；若退出请求因网络/5xx失败且会话仍有效，再恢复连接。
   realtime.disconnect();
   void router.replace({ name: "login" });
 };
@@ -104,6 +112,7 @@ const logout = async (): Promise<void> => {
 onMounted(() => {
   mounted = true;
   removeUnauthorizedHandler = realtime.onUnauthorized(handleUnauthorized);
+  // connect 会一直负责退避恢复；首次同步失败只提示，不把页面状态乐观清空。
   void realtime.connect().catch(() => {
     if (mounted && !logoutPending.value)
       pageError.value = "实时连接暂时不可用，系统将继续尝试恢复。";

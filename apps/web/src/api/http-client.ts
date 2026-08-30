@@ -1,3 +1,9 @@
+/**
+ * 浏览器端 REST 客户端。
+ *
+ * 所有请求使用同源 Cookie，并把服务端稳定错误结构转换为 ApiClientError；网络
+ * 异常和非 JSON 响应也会归一化，页面组件无需理解 fetch 的各种失败形态。
+ */
 import type {
   ApiErrorResponse,
   BootstrapResponse,
@@ -107,6 +113,7 @@ export class HttpClient {
     if (query !== undefined) url.search = new URLSearchParams(query).toString();
     const requestInit: RequestInit = {
       method,
+      // 允许浏览器附带会话 Cookie；HttpOnly 保证前端代码无法读取其内容。
       credentials: "include"
     };
     if (body !== undefined) {
@@ -121,6 +128,7 @@ export class HttpClient {
       const rawBody = await response.text();
       const payload = parseJson(rawBody);
       if (response.ok) return payload as T;
+      // 保留服务端 requestId，现场排错时可将页面错误与服务端日志关联。
       if (isApiErrorResponse(payload)) {
         throw new ApiClientError(
           response.status,

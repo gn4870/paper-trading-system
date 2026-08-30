@@ -1,3 +1,9 @@
+/**
+ * 前端路由与登录态守卫。
+ *
+ * 首次导航前只恢复一次服务端会话；匿名用户不能进入交易页，已登录用户也不会
+ * 回到登录/注册页。未知地址根据当前身份收敛到可用页面。
+ */
 import type { Component } from "vue";
 import type { RouterHistory } from "vue-router";
 import { createRouter, createWebHistory } from "vue-router";
@@ -36,6 +42,7 @@ export const createAppRouter = (options: AppRouterOptions = {}) => {
 
   router.beforeEach(async (to) => {
     const auth = getAuthStore();
+    // 等待身份恢复后再做跳转，避免刷新 /trade 时先闪到登录页。
     if (auth.status === "unknown") {
       restorePromise ??= auth.restore();
       await restorePromise;

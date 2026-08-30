@@ -1,3 +1,10 @@
+/**
+ * WebSocket 事件协议。
+ *
+ * 业务事件都带 eventId 与单调递增的 stateVersion。前端可用 eventId 去重，
+ * 用 stateVersion 判断事件是否已经包含在 bootstrap 快照中。heartbeat 和
+ * connection.ready 属于连接控制消息，不直接修改交易状态。
+ */
 import type { AccountSnapshot, Order, StockQuote, Trade } from "./domain.js";
 
 export interface EventMetadata {

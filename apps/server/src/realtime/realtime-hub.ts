@@ -1,3 +1,9 @@
+/**
+ * 服务端 WebSocket 网关。
+ *
+ * 它用同一个 HttpOnly Session Cookie 鉴权，只向用户发送公共行情和属于自己的
+ * 私有订单/账户/成交事件；同时负责心跳、慢客户端隔离和退出后的连接撤销。
+ */
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 
@@ -91,6 +97,7 @@ export class RealtimeHub {
 
     this.attachedServer = server;
     server.on("upgrade", this.handleUpgrade);
+    // 业务模块只发布到 EventJournal，不直接依赖 WebSocket 传输。
     this.unsubscribeJournal = this.journal.subscribe((event) => {
       this.deliver(event);
     });
@@ -103,6 +110,8 @@ export class RealtimeHub {
 
   startHeartbeat(): void {
     if (this.stopped) return;
+    // ping/pong 用于服务端清理半开连接；应用层 heartbeat 让浏览器也能检测到
+    // “TCP 尚未关闭但服务端已不再发送业务消息”的假在线状态。
     if (this.heartbeatTimer === undefined) {
       this.heartbeatTimer = this.scheduler.setInterval(() => {
         this.pingClients();
@@ -127,6 +136,7 @@ export class RealtimeHub {
     socket: Duplex,
     head: Buffer
   ): void => {
+    // 只接受精确 /ws，避免普通 HTTP 或相似路径被误升级。
     if (this.stopped || request.url !== "/ws") {
       socket.destroy();
       return;
@@ -167,6 +177,7 @@ export class RealtimeHub {
       return;
     }
 
+    // 新连接从当前版本开始；历史缺口由客户端紧接着请求 bootstrap 快照恢复。
     const state: ClientState = {
       userId,
       sessionId,
@@ -201,6 +212,7 @@ export class RealtimeHub {
       ) {
         continue;
       }
+      // 全局版本允许跳号：中间版本可能是其他用户不可见的私有事件。
       if (this.send(client, serverEvent)) {
         state.lastStateVersion = event.stateVersion;
       }
@@ -214,6 +226,7 @@ export class RealtimeHub {
       const serialized = JSON.stringify(event);
       const bufferedAmount = this.bufferedAmount(client);
       const nextBufferedAmount = bufferedAmount + Buffer.byteLength(serialized);
+      // 不让慢客户端无限堆积内存；达到阈值时主动断开并让客户端走快照重连。
       if (
         !Number.isFinite(bufferedAmount) ||
         bufferedAmount < 0 ||

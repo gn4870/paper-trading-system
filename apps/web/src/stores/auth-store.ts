@@ -1,3 +1,9 @@
+/**
+ * 当前浏览器会话的身份状态。
+ *
+ * 页面刷新时通过 /api/bootstrap 恢复用户，而不是读取 HttpOnly Cookie；401 会
+ * 收敛为匿名状态，5xx/网络错误则不会轻易丢弃仍可能有效的服务端会话。
+ */
 import type {
   BootstrapResponse,
   LoginRequest,
@@ -41,6 +47,7 @@ export const createAuthStoreHarness = (http: AuthHttpClient): AuthStore => {
     restore: async () => {
       if (state.status !== "unknown") return;
       if (restorePromise !== undefined) return restorePromise;
+      // 同一应用生命周期只合并执行一次恢复请求，避免多个路由守卫重复 bootstrap。
       restorePromise = (async () => {
         try {
           const bootstrap = await http.get<BootstrapResponse>("/api/bootstrap");

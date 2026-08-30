@@ -1,3 +1,9 @@
+/**
+ * 已提交业务状态与 WebSocket 传输之间的进程内事件日志。
+ *
+ * 它不负责持久化，只负责为事件分配全局版本、标记可见范围并按顺序通知订阅者。
+ * 订阅者（例如 WebSocket 网关）失败不能让已经提交的交易反向失败。
+ */
 import type { BusinessServerEvent, EventMetadata } from "@paper/shared";
 
 export interface Clock {
@@ -66,6 +72,7 @@ export class EventJournal {
       occurredAt
     })) as JournalEvent[];
 
+    // 先完整构造这一批事件，只有构造成功后才推进全局版本。
     if (events.length > 0) {
       this.version = events[events.length - 1]!.stateVersion;
     }
@@ -81,6 +88,7 @@ export class EventJournal {
   private drainDeliveryQueue(): void {
     if (this.delivering) return;
 
+    // 嵌套 publish 先进入队列，当前批次发送完后再处理，保证版本顺序不被打乱。
     this.delivering = true;
     try {
       let events = this.deliveryQueue.shift();

@@ -1,3 +1,9 @@
+/**
+ * 内存用户与会话服务。
+ *
+ * 注册负责规范化用户名、保存密码摘要并创建初始资金账户；登录/退出管理随机
+ * Session ID。所有用户和会话随进程重启清空，符合题目“不要求持久化”的范围。
+ */
 import { loginSchema, registerSchema } from "@paper/shared";
 
 import { AccountLedger } from "../accounts/account-ledger.js";
@@ -55,6 +61,7 @@ export class AuthService {
 
   async register(username: string, password: string): Promise<AuthResult> {
     const parsed = registerSchema.parse({ username, password });
+    // scrypt 是异步操作，完成后再次检查用户名，避免哈希期间另一注册请求占用。
     this.assertUsernameAvailable(parsed.username);
     const passwordDigest = await hashPassword(parsed.password);
     this.assertUsernameAvailable(parsed.username);
@@ -83,6 +90,7 @@ export class AuthService {
       (user) =>
         user.kind === "REAL" && user.normalizedUsername === parsed.username
     );
+    // 用户不存在时也计算一次固定的 dummy digest，减少通过响应耗时枚举用户名。
     const verified = await verifyPassword(
       parsed.password,
       found?.passwordDigest ?? dummyDigest

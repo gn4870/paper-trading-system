@@ -1,3 +1,8 @@
+/**
+ * Express 会话解析与路由鉴权中间件。
+ * authenticateSession 只尝试恢复身份，不会拒绝匿名请求；真正需要登录的接口
+ * 再显式挂载 requireAuth，从而让登录、注册和健康检查保持公开。
+ */
 import { parseCookie } from "cookie";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 

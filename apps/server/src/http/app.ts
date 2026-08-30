@@ -1,3 +1,9 @@
+/**
+ * Express 应用组装层。
+ *
+ * REST 负责命令和完整快照，WebSocket 由同一 HTTP Server 的 upgrade 事件处理。
+ * 生产环境还由这里托管 Vue 构建产物，并严格保留 /api 与 /ws 命名空间。
+ */
 import {
   loginSchema,
   placeOrderSchema,
@@ -117,6 +123,7 @@ export const createApp = (dependencies: AppDependencies) => {
     const startedAt = nowMs();
     req.requestId = requestIds.next();
     res.setHeader("X-Request-Id", req.requestId);
+    // 日志只包含有界请求元数据，不记录 Cookie、密码或请求正文。
     res.once("finish", () => {
       try {
         log({
@@ -167,6 +174,7 @@ export const createApp = (dependencies: AppDependencies) => {
 
   app.get("/api/bootstrap", requireAuth, (req, res) => {
     const user = req.authUser!;
+    // 快照与 stateVersion 共同构成前端重连恢复的基线。
     const snapshot: BootstrapResponse = {
       user,
       account: dependencies.ledger.snapshot(user.id),
@@ -213,6 +221,7 @@ export const createApp = (dependencies: AppDependencies) => {
 
   if (dependencies.staticDirectory !== undefined) {
     const staticDirectory = resolve(dependencies.staticDirectory);
+    // 解码后再判断保留路径，防止编码后的 /api、/ws 或反斜杠绕过检查。
     app.use((req, _res, next) => {
       const decodedPath = decodePathname(req.path);
       if (decodedPath === undefined) {
@@ -244,6 +253,7 @@ export const createApp = (dependencies: AppDependencies) => {
 
     app.use((req, res, next) => {
       const decodedPath = decodePathname(req.path);
+      // SPA fallback 只服务无扩展名的 HTML 导航，静态资源/API 探测继续返回 404。
       const isHistoryNavigation =
         (req.method === "GET" || req.method === "HEAD") &&
         req.accepts("html") === "html" &&

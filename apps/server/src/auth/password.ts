@@ -1,3 +1,9 @@
+/**
+ * 密码摘要工具。
+ *
+ * scrypt 是面向密码的慢哈希；每个密码使用独立随机盐。摘要中保存算法版本、
+ * 盐和派生密钥，不保存明文密码。比较时使用 timingSafeEqual 降低时序泄漏。
+ */
 import {
   randomBytes,
   scrypt as scryptCallback,
